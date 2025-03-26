@@ -1,2 +1,4 @@
 output/
 config.json
+*.log
+.DS_Store
