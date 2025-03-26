@@ -6,14 +6,13 @@ import (
 	"io"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"confluence-exporter/internal/api"
 	"confluence-exporter/internal/config"
-	"confluence-exporter/internal/converter"
 	"confluence-exporter/internal/models"
+	"confluence-exporter/internal/output"
 	"confluence-exporter/pkg/utils"
 )
 
@@ -59,7 +58,7 @@ func (pt *ProgressTracker) GetStats() string {
 		elapsed, pt.lastPagesPerMinute, pt.processedPages, pt.totalPages)
 }
 
-func exportSpace(client *api.ConfluenceClient, spaceKey string, cfg *config.Config, progress *ProgressTracker) error {
+func exportSpace(client *api.ConfluenceClient, spaceKey string, cfg *config.Config, progress *ProgressTracker, handler output.Handler) error {
 	// Get all pages from specified space
 	log.Printf("🔍 Fetching pages from space: %s", spaceKey)
 	pages, err := client.GetPages(spaceKey)
@@ -68,12 +67,6 @@ func exportSpace(client *api.ConfluenceClient, spaceKey string, cfg *config.Conf
 	}
 
 	log.Printf("📚 Found %d pages to export in space %s", len(pages), spaceKey)
-
-	// Create space-specific output directory
-	spaceOutputDir := filepath.Join(cfg.Export.OutputDir, spaceKey)
-	if err := os.MkdirAll(spaceOutputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %v", err)
-	}
 
 	// Create a progress tracker for this space's pages
 	spaceProgress := NewProgressTracker(len(pages))
@@ -85,52 +78,11 @@ func exportSpace(client *api.ConfluenceClient, spaceKey string, cfg *config.Conf
 		spaceProgress.Update()
 		fmt.Printf("\r%s | Space: %s | Pages: %s", progress.GetProgressBar(), spaceKey, spaceProgress.GetStats())
 
-		// Convert HTML content to Markdown
-		markdown, err := converter.ConvertToMarkdown(page.Content)
-		if err != nil {
+		// Save page using the output handler
+		if err := handler.SavePage(client, page, spaceKey); err != nil {
 			fmt.Println() // New line for error message
-			log.Printf("❌ Failed to convert page %s: %v", page.Title, err)
+			log.Printf("❌ Failed to save page %s: %v", page.Title, err)
 			continue
-		}
-
-		// Create safe filename
-		safeFilename := getSafeFilename(page.Title)
-		outputPath := filepath.Join(spaceOutputDir, safeFilename+".md")
-
-		// Write markdown content to file
-		if err := os.WriteFile(outputPath, []byte(markdown), 0644); err != nil {
-			fmt.Println() // New line for error message
-			log.Printf("❌ Failed to write page %s: %v", page.Title, err)
-			continue
-		}
-
-		// Get and save attachments if enabled
-		if cfg.Export.IncludeAttachments {
-			attachments, err := client.GetAttachments(page.ID)
-			if err != nil {
-				fmt.Println() // New line for error message
-				log.Printf("❌ Failed to get attachments for page %s: %v", page.Title, err)
-				continue
-			}
-
-			if len(attachments) > 0 {
-				// Create attachments directory
-				attachmentsDir := filepath.Join(spaceOutputDir, "attachments", safeFilename)
-				if err := os.MkdirAll(attachmentsDir, 0755); err != nil {
-					fmt.Println() // New line for error message
-					log.Printf("❌ Failed to create attachments directory for page %s: %v", page.Title, err)
-					continue
-				}
-
-				for _, attachment := range attachments {
-					outputPath := filepath.Join(attachmentsDir, attachment.FileName)
-					if err := downloadAttachment(client, attachment, outputPath); err != nil {
-						fmt.Println() // New line for error message
-						log.Printf("❌ Failed to download attachment %s: %v", attachment.FileName, err)
-						continue
-					}
-				}
-			}
 		}
 	}
 
@@ -154,18 +106,23 @@ func main() {
 	}
 	log.Printf("🚀 Starting Confluence export process...")
 
+	// Initialize output handler
+	handler, err := output.NewHandler(cfg.Export.OutputType, cfg.Export.OutputDir, cfg.Export.IncludeAttachments)
+	if err != nil {
+		log.Fatalf("Failed to initialize output handler: %v", err)
+	}
+	defer handler.Close()
+
+	if err := handler.Initialize(); err != nil {
+		log.Fatalf("Failed to initialize output: %v", err)
+	}
+
 	// Initialize Confluence client
 	client := api.NewConfluenceClient(
 		cfg.Confluence.BaseURL,
 		cfg.Confluence.Username,
 		cfg.Confluence.APIToken,
 	)
-
-	// Create base output directory if it doesn't exist
-	if err := os.MkdirAll(cfg.Export.OutputDir, 0755); err != nil {
-		log.Fatalf("Failed to create output directory: %v", err)
-	}
-	log.Printf("📁 Output directory created/verified: %s", cfg.Export.OutputDir)
 
 	// Get all spaces if no specific space key is provided
 	var spaces []models.Space
@@ -188,7 +145,7 @@ func main() {
 	// Export each space
 	for _, space := range spaces {
 		log.Printf("🚀 Starting export of space: %s", space.Key)
-		if err := exportSpace(client, space.Key, cfg, progress); err != nil {
+		if err := exportSpace(client, space.Key, cfg, progress, handler); err != nil {
 			log.Printf("❌ Failed to export space %s: %v", space.Key, err)
 			continue
 		}
@@ -200,7 +157,14 @@ func main() {
 	// Print final progress bar
 	fmt.Println("\n")
 	log.Printf("🎉 Export completed successfully!")
-	fmt.Printf("✨ Export completed successfully! Check the log file for details.\n")
+	
+	// Print output location based on type
+	if cfg.Export.OutputType == "file" {
+		fmt.Printf("✨ Export completed successfully! Files saved to %s\n", cfg.Export.OutputDir)
+	} else {
+		fmt.Printf("✨ Export completed successfully! Data saved to confluence_pages.db\n")
+	}
+	
 	fmt.Printf("📊 Final statistics:\n")
 	fmt.Printf("   • Total time: %s\n", time.Since(progress.startTime).Round(time.Second))
 	fmt.Printf("   • Total spaces processed: %d\n", progress.processedPages)

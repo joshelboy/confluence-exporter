@@ -23,6 +23,7 @@ type ConfluenceConfig struct {
 type ExportConfig struct {
 	SpaceKey           string       `json:"spaceKey"`
 	OutputDir          string       `json:"outputDir"`
+	OutputType         string       `json:"outputType"`
 	Recursive          bool         `json:"recursive"`
 	IncludeAttachments bool         `json:"includeAttachments"`
 	ConcurrentRequests int          `json:"concurrentRequests"`
@@ -43,16 +44,22 @@ type LoggingConfig struct {
 
 // LoadConfig reads the config file from the specified path
 func LoadConfig(path string) (*Config, error) {
-	file, err := os.Open(path)
+	file, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
 
 	var config Config
-	decoder := json.NewDecoder(file)
-	if err := decoder.Decode(&config); err != nil {
+	if err := json.Unmarshal(file, &config); err != nil {
 		return nil, err
+	}
+
+	// Set default values
+	if config.Export.OutputType == "" {
+		config.Export.OutputType = "file"
+	}
+	if config.Export.OutputDir == "" {
+		config.Export.OutputDir = "./output"
 	}
 
 	return &config, nil
