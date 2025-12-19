@@ -6,6 +6,7 @@
     },
     "export": {
       "spaceKey": "TEAM",
+      "pageId": "",
       "outputDir": "./output",
       "outputType": "file",
       "recursive": true,

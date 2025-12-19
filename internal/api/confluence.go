@@ -147,6 +147,132 @@ func (c *ConfluenceClient) GetPages(spaceKey string) ([]models.Page, error) {
 	return allPages, nil
 }
 
+// GetPage retrieves a single page by its ID
+func (c *ConfluenceClient) GetPage(pageID string) (*models.Page, error) {
+	endpoint := fmt.Sprintf("/rest/api/content/%s", pageID)
+
+	params := url.Values{}
+	params.Add("expand", "body.storage,version,space,ancestors")
+
+	resp, err := c.sendRequest("GET", endpoint, params, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		ID    string `json:"id"`
+		Title string `json:"title"`
+		Space struct {
+			Key string `json:"key"`
+		} `json:"space"`
+		Body struct {
+			Storage struct {
+				Value string `json:"value"`
+			} `json:"storage"`
+		} `json:"body"`
+		Version struct {
+			Number int `json:"number"`
+		} `json:"version"`
+		Links struct {
+			WebUI string `json:"webui"`
+		} `json:"_links"`
+		Ancestors []struct {
+			ID string `json:"id"`
+		} `json:"ancestors"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	page := &models.Page{
+		ID:       result.ID,
+		Title:    result.Title,
+		SpaceKey: result.Space.Key,
+		Version:  result.Version.Number,
+		Content:  result.Body.Storage.Value,
+		URL:      result.Links.WebUI,
+	}
+
+	if len(result.Ancestors) > 0 {
+		page.ParentID = result.Ancestors[len(result.Ancestors)-1].ID
+	}
+
+	return page, nil
+}
+
+// GetChildPages retrieves all direct child pages for a given parent page ID
+func (c *ConfluenceClient) GetChildPages(parentPageID string) ([]models.Page, error) {
+	endpoint := fmt.Sprintf("/rest/api/content/%s/child/page", parentPageID)
+
+	var allPages []models.Page
+	start := 0
+	limit := 25
+
+	for {
+		params := url.Values{}
+		params.Add("expand", "body.storage,version,space")
+		params.Add("start", strconv.Itoa(start))
+		params.Add("limit", strconv.Itoa(limit))
+
+		resp, err := c.sendRequest("GET", endpoint, params, nil)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		var result struct {
+			Results []struct {
+				ID    string `json:"id"`
+				Title string `json:"title"`
+				Type  string `json:"type"`
+				Space struct {
+					Key string `json:"key"`
+				} `json:"space"`
+				Body struct {
+					Storage struct {
+						Value string `json:"value"`
+					} `json:"storage"`
+				} `json:"body"`
+				Version struct {
+					Number int `json:"number"`
+				} `json:"version"`
+				Links struct {
+					WebUI string `json:"webui"`
+				} `json:"_links"`
+			} `json:"results"`
+			Size  int `json:"size"`
+			Limit int `json:"limit"`
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return nil, err
+		}
+
+		for _, p := range result.Results {
+			page := models.Page{
+				ID:       p.ID,
+				Title:    p.Title,
+				SpaceKey: p.Space.Key,
+				Version:  p.Version.Number,
+				Content:  p.Body.Storage.Value,
+				URL:      p.Links.WebUI,
+				ParentID: parentPageID,
+			}
+			allPages = append(allPages, page)
+		}
+
+		if len(result.Results) < limit {
+			break
+		}
+
+		start += limit
+	}
+
+	return allPages, nil
+}
+
 // GetAttachments retrieves all attachments for a page
 func (c *ConfluenceClient) GetAttachments(pageID string) ([]models.Attachment, error) {
 	endpoint := fmt.Sprintf("/rest/api/content/%s/child/attachment", pageID)

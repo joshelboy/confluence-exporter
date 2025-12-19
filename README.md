@@ -6,6 +6,7 @@ Confluence Exporter is a CLI tool designed to export content from Confluence int
 
 - Fetch pages from Confluence
 - Convert Confluence content to Markdown
+- Export either whole spaces or the full page tree of a specific root page
 - Export to multiple formats:
   - **File**: Save as individual Markdown files
   - **Database**: Store in DuckDB database
@@ -63,6 +64,7 @@ Create a `config.json` file based on `config-sample.json`:
   },
   "export": {
     "spaceKey": "TEAM",
+    "pageId": "5702075",
     "outputDir": "./output",
     "outputType": "meilisearch",
     "recursive": true,
@@ -80,11 +82,14 @@ Create a `config.json` file based on `config-sample.json`:
 }
 ```
 
+Set `pageId` if you want to export a specific page and all of its descendants. When `pageId` is provided, `spaceKey` is ignored.
+
 ### Output Types
 
 - **`file`**: Exports pages as individual Markdown files in a directory structure
 - **`db`**: Stores pages in a DuckDB database file (`confluence_pages.db`)
 - **`meilisearch`**: Exports all pages as a single JSON file (`confluence_pages_meilisearch.json`) with UIDs for MeiliSearch indexing
+- **`singletxt`**: Exports all pages into a single text file (`confluence_export.txt`) with metadata headers for each page (title, space, link, timestamps, authors, labels)
 
 ## Usage
 

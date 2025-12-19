@@ -22,6 +22,7 @@ type ConfluenceConfig struct {
 // ExportConfig holds settings for the export process
 type ExportConfig struct {
 	SpaceKey           string       `json:"spaceKey"`
+	PageID             string       `json:"pageId"`
 	OutputDir          string       `json:"outputDir"`
 	OutputType         string       `json:"outputType"`
 	Recursive          bool         `json:"recursive"`
