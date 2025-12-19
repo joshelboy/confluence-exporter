@@ -159,9 +159,12 @@ func main() {
 	log.Printf("🎉 Export completed successfully!")
 	
 	// Print output location based on type
-	if cfg.Export.OutputType == "file" {
+	switch cfg.Export.OutputType {
+	case "file":
 		fmt.Printf("✨ Export completed successfully! Files saved to %s\n", cfg.Export.OutputDir)
-	} else {
+	case "meilisearch":
+		fmt.Printf("✨ Export completed successfully! MeiliSearch JSON saved to %s/confluence_pages_meilisearch.json\n", cfg.Export.OutputDir)
+	default:
 		fmt.Printf("✨ Export completed successfully! Data saved to confluence_pages.db\n")
 	}
 	

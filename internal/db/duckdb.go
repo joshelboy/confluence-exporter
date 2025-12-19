@@ -25,10 +25,10 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	// Create table if it doesn't exist
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS pages (
+			uid VARCHAR PRIMARY KEY,
 			title VARCHAR,
 			body VARCHAR,
-			link VARCHAR,
-			uid VARCHAR
+			link VARCHAR
 		)
 	`)
 	if err != nil {
@@ -38,15 +38,15 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	return db, nil
 }
 
-// InsertPage inserts a page into the database
+// InsertPage inserts a page into the database or updates it if it already exists
 func InsertPage(db *sql.DB, page Page) error {
 	_, err := db.Exec(`
-		INSERT INTO pages (title, body, link, uid)
+		INSERT OR REPLACE INTO pages (uid, title, body, link)
 		VALUES (?, ?, ?, ?)
-	`, page.Title, page.Body, page.Link, page.UID)
+	`, page.UID, page.Title, page.Body, page.Link)
 
 	if err != nil {
-		return fmt.Errorf("failed to insert page: %v", err)
+		return fmt.Errorf("failed to insert/update page: %v", err)
 	}
 
 	return nil

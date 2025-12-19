@@ -6,6 +6,10 @@ Confluence Exporter is a CLI tool designed to export content from Confluence int
 
 - Fetch pages from Confluence
 - Convert Confluence content to Markdown
+- Export to multiple formats:
+  - **File**: Save as individual Markdown files
+  - **Database**: Store in DuckDB database
+  - **MeiliSearch**: Export as JSON with UIDs for MeiliSearch indexing
 - Easy configuration through environment variables or config files
 
 ## Project Structure
@@ -46,6 +50,42 @@ confluence-exporter
    go mod tidy
    ```
 
+## Configuration
+
+Create a `config.json` file based on `config-sample.json`:
+
+```json
+{
+  "confluence": {
+    "baseUrl": "https://your-domain.atlassian.net/wiki",
+    "apiToken": "your-api-token",
+    "username": "your-email@example.com"
+  },
+  "export": {
+    "spaceKey": "TEAM",
+    "outputDir": "./output",
+    "outputType": "meilisearch",
+    "recursive": true,
+    "includeAttachments": false,
+    "concurrentRequests": 5,
+    "format": {
+      "includeFrontMatter": true,
+      "preserveLinks": true
+    }
+  },
+  "logging": {
+    "level": "info",
+    "file": "confluence-export.log"
+  }
+}
+```
+
+### Output Types
+
+- **`file`**: Exports pages as individual Markdown files in a directory structure
+- **`db`**: Stores pages in a DuckDB database file (`confluence_pages.db`)
+- **`meilisearch`**: Exports all pages as a single JSON file (`confluence_pages_meilisearch.json`) with UIDs for MeiliSearch indexing
+
 ## Usage
 
 To run the application, use the following command:
@@ -54,7 +94,7 @@ To run the application, use the following command:
 go run cmd/exporter/main.go --config config.json
 ```
 
-Replace `<path_to_config_file>` with the path to your configuration file containing the necessary API credentials.
+Replace `config.json` with the path to your configuration file containing the necessary API credentials.
 
 ## License
 
